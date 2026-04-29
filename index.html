@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tech Earth</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tech-earth {
+      width: 300px;
+      height: 300px;
+      position: relative;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    canvas {
+      width: 300px;
+      height: 300px;
+      display: block;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <div class="tech-earth">
+    <canvas id="globe" width="300" height="300"></canvas>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("globe");
+    const ctx = canvas.getContext("2d");
+
+    const W = 300;
+    const H = 300;
+    const CX = 150;
+    const CY = 190;
+    const R = 92;
+
+    let rotY = 0, rotX = 0;
+    let targetRotY = 0, targetRotX = 0;
+
+    const points = [];
+    const links = [];
+    const outerLines = [];
+
+    const POINT_COUNT = 900;
+    const OUTER_LINE_COUNT = 48;
+
+    function spherePoint() {
+      const u = Math.random();
+      const v = Math.random();
+      const theta = u * Math.PI * 2;
+      const phi = Math.acos(2 * v - 1);
+
+      const x = R * Math.sin(phi) * Math.cos(theta);
+      const y = R * Math.cos(phi);
+      const z = R * Math.sin(phi) * Math.sin(theta);
+
+      if (y > R * 0.42) return spherePoint();
+      return { x, y, z };
+    }
+
+    for (let i = 0; i < POINT_COUNT; i++) points.push(spherePoint());
+
+    for (let i = 0; i < points.length; i += 6) {
+      links.push([
+        points[i],
+        points[(i + Math.floor(Math.random() * 10) + 1) % points.length]
+      ]);
+    }
+
+    for (let i = 0; i < OUTER_LINE_COUNT; i++) {
+      const angle = Math.PI + (i / OUTER_LINE_COUNT) * Math.PI;
+      outerLines.push({
+        x: Math.cos(angle) * (R * 0.82),
+        y: Math.sin(angle) * (R * 0.82),
+        z: (Math.random() - 0.5) * 35,
+        len: 10 + Math.random() * 22,
+        spread: (Math.random() - 0.5) * 0.55,
+        alpha: 0.18 + Math.random() * 0.28
+      });
+    }
+
+    function rotatePoint(p, rx, ry) {
+      let { x, y, z } = p;
+
+      const cy = Math.cos(ry), sy = Math.sin(ry);
+      let dx = x * cy - z * sy;
+      let dz = x * sy + z * cy;
+
+      const cx = Math.cos(rx), sx = Math.sin(rx);
+      let dy = y * cx - dz * sx;
+      dz = y * sx + dz * cx;
+
+      return { x: dx, y: dy, z: dz };
+    }
+
+    function project(p) {
+      const scale = 0.76 + (p.z + R) / (R * 2) * 0.42;
+      return {
+        x: CX + p.x * scale,
+        y: CY + p.y * scale,
+        z: p.z,
+        scale,
+        alpha: 0.18 + (p.z + R) / (R * 2) * 0.82
+      };
+    }
+
+    function drawOuterScatter() {
+      for (const l of outerLines) {
+        const p = project(rotatePoint(l, rotX, rotY));
+        if (p.y > 292) continue;
+
+        const ex = p.x + Math.cos(l.spread + rotY * 0.5) * l.len;
+        const ey = p.y - Math.abs(Math.sin(l.spread)) * l.len * 0.85;
+
+        const g = ctx.createLinearGradient(p.x, p.y, ex, ey);
+        g.addColorStop(0, `rgba(90,220,255,${l.alpha * p.alpha})`);
+        g.addColorStop(1, "rgba(90,220,255,0)");
+
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(ex, ey);
+        ctx.strokeStyle = g;
+        ctx.lineWidth = 0.7;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(ex, ey, 1, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(130,240,255,${l.alpha})`;
+        ctx.shadowColor = "rgba(130,240,255,0.8)";
+        ctx.shadowBlur = 6;
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+
+      const map = new Map();
+      const projected = points.map(p => {
+        const pp = project(rotatePoint(p, rotX, rotY));
+        map.set(p, pp);
+        return pp;
+      });
+
+      drawOuterScatter();
+
+      for (const [a, b] of links) {
+        const pa = map.get(a), pb = map.get(b);
+        if (pa.y > 292 || pb.y > 292) continue;
+
+        const dx = pa.x - pb.x;
+        const dy = pa.y - pb.y;
+        if (dx * dx + dy * dy < 1100) {
+          ctx.beginPath();
+          ctx.moveTo(pa.x, pa.y);
+          ctx.lineTo(pb.x, pb.y);
+          ctx.strokeStyle = `rgba(70,180,255,${0.06 * pa.alpha})`;
+          ctx.lineWidth = 0.6;
+          ctx.stroke();
+        }
+      }
+
+      projected.sort((a, b) => a.z - b.z);
+
+      for (const p of projected) {
+        if (p.y > 292) continue;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 0.5 + p.scale * 1.2, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(150,235,255,${p.alpha})`;
+        ctx.shadowColor = "rgba(100,220,255,0.85)";
+        ctx.shadowBlur = 6;
+        ctx.fill();
+      }
+
+      ctx.shadowBlur = 0;
+
+      ctx.beginPath();
+      ctx.arc(CX, CY, R + 1, Math.PI, Math.PI * 2);
+      ctx.strokeStyle = "rgba(100,220,255,0.16)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    function animate() {
+      rotY += (targetRotY - rotY) * 0.06;
+      rotX += (targetRotX - rotX) * 0.06;
+      draw();
+      requestAnimationFrame(animate);
+    }
+
+    canvas.addEventListener("mousemove", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = (e.clientX - rect.left - 150) / 300;
+      const my = (e.clientY - rect.top - 150) / 300;
+
+      targetRotY = mx * 1.4;
+      targetRotX = my * 0.65;
+    });
+
+    canvas.addEventListener("mouseleave", () => {
+      targetRotX = 0;
+      targetRotY = 0;
+    });
+
+    animate();
+  </script>
+</body>
+</html>
