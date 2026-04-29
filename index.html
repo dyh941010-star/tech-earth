@@ -64,54 +64,86 @@
     const outerLines = [];
     const rays = [];
 
-    const POINT_COUNT = 1500;
-    const OUTER_LINE_COUNT = 150;   // 增加散射线数量
-    const RAY_COUNT = 140;          // 增加外围长射线数量
+    const POINT_COUNT = 2200;
+    const OUTER_LINE_COUNT = 170;
+    const RAY_COUNT = 120;
 
-    function spherePoint() {
-      const u = Math.random();
-      const v = Math.random();
-      const theta = u * Math.PI * 2;
-      const phi = Math.acos(2 * v - 1);
+    // 伪大陆分布（用多个高斯区域模拟真实板块）
+    const continents = [
+      { lon: -105, lat: 45, rx: 38, ry: 24 }, // 北美
+      { lon: -65,  lat: -15, rx: 24, ry: 32 }, // 南美
+      { lon: 20,   lat: 8, rx: 26, ry: 34 }, // 非洲
+      { lon: 18,   lat: 52, rx: 20, ry: 12 }, // 欧洲
+      { lon: 88,   lat: 42, rx: 58, ry: 24 }, // 亚洲
+      { lon: 135,  lat: -24, rx: 18, ry: 12 }, // 澳大利亚
+      { lon: -42,  lat: 72, rx: 12, ry: 8 }   // 格陵兰
+    ];
 
-      const x = R * Math.sin(phi) * Math.cos(theta);
-      const y = R * Math.cos(phi);
-      const z = R * Math.sin(phi) * Math.sin(theta);
-
-      if (y > R * 0.42) return spherePoint();
-      return { x, y, z };
+    function toXYZ(lon, lat, radius = R) {
+      const phi = (90 - lat) * Math.PI / 180;
+      const theta = (lon + 180) * Math.PI / 180;
+      return {
+        x: -(radius * Math.sin(phi) * Math.cos(theta)),
+        y: radius * Math.cos(phi),
+        z: radius * Math.sin(phi) * Math.sin(theta)
+      };
     }
 
-    for (let i = 0; i < POINT_COUNT; i++) points.push(spherePoint());
+    function inContinent(lon, lat) {
+      for (const c of continents) {
+        const dx = (lon - c.lon) / c.rx;
+        const dy = (lat - c.lat) / c.ry;
+        if ((dx * dx + dy * dy) < 1) return true;
+      }
+      return false;
+    }
 
-    for (let i = 0; i < points.length; i += 4) {
+    function createGeoPoint() {
+      const lon = -180 + Math.random() * 360;
+      const lat = -70 + Math.random() * 145;
+
+      const onLand = inContinent(lon, lat);
+      const keep = onLand
+        ? Math.random() < 0.88   // 大陆高密度
+        : Math.random() < 0.16;  // 海洋低密度
+
+      if (!keep) return createGeoPoint();
+
+      return toXYZ(lon, lat);
+    }
+
+    for (let i = 0; i < POINT_COUNT; i++) points.push(createGeoPoint());
+
+    for (let i = 0; i < points.length; i += 5) {
       links.push([
         points[i],
-        points[(i + Math.floor(Math.random() * 18) + 1) % points.length]
+        points[(i + Math.floor(Math.random() * 20) + 1) % points.length]
       ]);
     }
 
+    // 更均匀、随机方向的散射线
     for (let i = 0; i < OUTER_LINE_COUNT; i++) {
-      const angle = Math.PI + (i / OUTER_LINE_COUNT) * Math.PI;
+      const a = Math.random() * Math.PI;
       outerLines.push({
-        x: Math.cos(angle) * (R * 0.82),
-        y: Math.sin(angle) * (R * 0.82),
-        z: (Math.random() - 0.5) * 55,
-        len: 35 + Math.random() * 80,   // 拉长散射线
-        spread: (Math.random() - 0.5) * 0.9,
-        alpha: 0.12 + Math.random() * 0.32
+        x: Math.cos(a) * (R * (0.68 + Math.random() * 0.24)),
+        y: -Math.sin(a) * (R * (0.2 + Math.random() * 0.78)),
+        z: (Math.random() - 0.5) * 80,
+        len: 28 + Math.random() * 95,
+        angle: Math.random() * Math.PI * 2, // 全方向随机
+        alpha: 0.08 + Math.random() * 0.28
       });
     }
 
+    // 更自然的远端射线
     for (let i = 0; i < RAY_COUNT; i++) {
-      const angle = Math.PI + Math.random() * Math.PI;
+      const angle = Math.random() * Math.PI * 2;
       rays.push({
         angle,
-        radius: R * (0.68 + Math.random() * 0.24),
-        len: 70 + Math.random() * 140,  // 拉长远端射线
-        speed: 0.004 + Math.random() * 0.01,
+        radius: R * (0.55 + Math.random() * 0.4),
+        len: 35 + Math.random() * 110,
+        speed: 0.004 + Math.random() * 0.012,
         phase: Math.random() * Math.PI * 2,
-        alpha: 0.035 + Math.random() * 0.09
+        alpha: 0.025 + Math.random() * 0.08
       });
     }
 
@@ -136,15 +168,15 @@
         y: CY + p.y * scale,
         z: p.z,
         scale,
-        alpha: 0.18 + (p.z + R) / (R * 2) * 0.85
+        alpha: 0.16 + (p.z + R) / (R * 2) * 0.88
       };
     }
 
     function drawRays() {
       for (const r of rays) {
         const pulse = (Math.sin(tick * r.speed + r.phase) + 1) * 0.5;
-        const sx = CX + Math.cos(r.angle + rotY * 0.28) * r.radius;
-        const sy = CY + Math.sin(r.angle) * r.radius * 0.92;
+        const sx = CX + Math.cos(r.angle + rotY * 0.12) * r.radius;
+        const sy = CY + Math.sin(r.angle) * r.radius * 0.65;
         const ex = sx + Math.cos(r.angle) * (r.len * pulse);
         const ey = sy + Math.sin(r.angle) * (r.len * pulse);
 
@@ -156,7 +188,7 @@
         ctx.moveTo(sx, sy);
         ctx.lineTo(ex, ey);
         ctx.strokeStyle = g;
-        ctx.lineWidth = 1.1;
+        ctx.lineWidth = 0.8;
         ctx.stroke();
       }
     }
@@ -166,26 +198,27 @@
         const p = project(rotatePoint(l, rotX, rotY));
         if (p.y > 392) continue;
 
-        const ex = p.x + Math.cos(l.spread + rotY * 0.7) * l.len;
-        const ey = p.y - Math.abs(Math.sin(l.spread)) * l.len;
+        const ang = l.angle + rotY * 0.2;
+        const ex = p.x + Math.cos(ang) * l.len;
+        const ey = p.y + Math.sin(ang) * l.len;
 
         const g = ctx.createLinearGradient(p.x, p.y, ex, ey);
         g.addColorStop(0, `rgba(90,220,255,${l.alpha * p.alpha})`);
-        g.addColorStop(0.55, `rgba(90,220,255,${l.alpha * 0.45})`);
+        g.addColorStop(0.5, `rgba(90,220,255,${l.alpha * 0.45})`);
         g.addColorStop(1, "rgba(90,220,255,0)");
 
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
         ctx.lineTo(ex, ey);
         ctx.strokeStyle = g;
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 0.9;
         ctx.stroke();
 
         ctx.beginPath();
-        ctx.arc(ex, ey, 1.5, 0, Math.PI * 2);
+        ctx.arc(ex, ey, 1.2, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(130,240,255,${l.alpha})`;
-        ctx.shadowColor = "rgba(130,240,255,0.95)";
-        ctx.shadowBlur = 12;
+        ctx.shadowColor = "rgba(130,240,255,0.9)";
+        ctx.shadowBlur = 10;
         ctx.fill();
       }
       ctx.shadowBlur = 0;
@@ -212,12 +245,12 @@
 
         const dx = pa.x - pb.x;
         const dy = pa.y - pb.y;
-        if (dx * dx + dy * dy < 1800) {
+        if (dx * dx + dy * dy < 1600) {
           ctx.beginPath();
           ctx.moveTo(pa.x, pa.y);
           ctx.lineTo(pb.x, pb.y);
-          ctx.strokeStyle = `rgba(70,180,255,${0.07 * pa.alpha})`;
-          ctx.lineWidth = 0.7;
+          ctx.strokeStyle = `rgba(70,180,255,${0.045 * pa.alpha})`;
+          ctx.lineWidth = 0.6;
           ctx.stroke();
         }
       }
@@ -228,10 +261,10 @@
         if (p.y > 392) continue;
 
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 0.6 + p.scale * 1.4, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(150,235,255,${p.alpha})`;
+        ctx.arc(p.x, p.y, 0.55 + p.scale * 1.35, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(160,238,255,${p.alpha})`;
         ctx.shadowColor = "rgba(100,220,255,0.95)";
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = 7;
         ctx.fill();
       }
 
@@ -239,14 +272,14 @@
 
       ctx.beginPath();
       ctx.arc(CX, CY, R + 1, Math.PI, Math.PI * 2);
-      ctx.strokeStyle = "rgba(100,220,255,0.18)";
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = "rgba(100,220,255,0.16)";
+      ctx.lineWidth = 1.1;
       ctx.stroke();
     }
 
     function animate() {
-      rotY += (targetRotY - rotY) * 0.055;
-      rotX += (targetRotX - rotX) * 0.055;
+      rotY += (targetRotY - rotY) * 0.05;
+      rotX += (targetRotX - rotX) * 0.05;
       draw();
       requestAnimationFrame(animate);
     }
@@ -256,8 +289,8 @@
       const mx = (e.clientX - rect.left - 200) / 400;
       const my = (e.clientY - rect.top - 200) / 400;
 
-      targetRotY = mx * 1.45;
-      targetRotX = my * 0.72;
+      targetRotY = mx * 1.3;
+      targetRotX = my * 0.65;
     });
 
     canvas.addEventListener("mouseleave", () => {
